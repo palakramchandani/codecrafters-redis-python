@@ -38,6 +38,9 @@ def handle_client(connection,address):
                 message = command_parts[1]
                 response = to_bulk_string(message)
                 connection.sendall(response)
+            elif cmd == 'PING':
+                connection.sendall(b'+PONG\r\n')
+
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

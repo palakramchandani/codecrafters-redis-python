@@ -53,6 +53,14 @@ def handle_client(connection,address):
                     del expiry_store[key]
                 connection.sendall(b'+OK\r\n')    
 
+            elif cmd == 'RPUSH' and len(command_parts) == 3:
+                key, value = command_parts[1], command_parts[2]
+                if key not in data_store:
+                    data_store[key] = [value]
+                    connection.sendall(b':1\r\n')
+                else:
+                connection.sendall(b'-ERR only new list creation is supported at this stage\r\n')
+
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]

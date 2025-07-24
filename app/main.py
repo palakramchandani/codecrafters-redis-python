@@ -27,17 +27,26 @@ def handle_client(connection,address):
                 break
             command_parts=parse_resp(data)
             if not command_parts:
+                
                 continue
-            command = command_parts[0].upper()
-            if command =="PING":
-                connection.sendall(b"+PONG\r\n")
-            elif command == "ECHO" and len(command_parts) >=2:
-                message = command_parts[1]
-                connection.sendall(to_bulk_string(message))
+            cmd=command_parts[0].upper()
+            if cmd=='SET' and len(command_parts) == 3:
+                key, value = command_parts[1], command_parts[2]
+                data_store[key] = value
+                connection.sendall(b'+OK\r\n')
+            elif cmd == 'GET' and len(command_parts) == 2:
+                key = command_parts[1]
+                if key in data_store:
+                    response = to_bulk_string(data_store[key])
+                else:
+                    response = b'$-1\r\n'
             else:
-                connection.sendall(b"-ERR unknown command\r\n")
+                connection.sendall(b'-ERR unknown command\r\n')
     finally:
         connection.close()
+
+data_store = {}
+    
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     server_socket.listen()

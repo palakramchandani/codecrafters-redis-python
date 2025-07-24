@@ -66,8 +66,8 @@ def handle_client(connection,address):
                     else:
                         connection.sendall(b'-ERR value is not a list\r\n')
                         return
-                    length = len(data_store[key])
-                    connection.sendall(f':{length}\r\n'.encode())
+                    
+                connection.sendall(f':{length}\r\n'.encode())
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]

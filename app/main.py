@@ -1,4 +1,5 @@
-import socket  # noqa: F401
+import socket 
+import threading # noqa: F401
 
 
 def handle_client(connection,address):
@@ -13,7 +14,7 @@ def main():
     server_socket.listen()
     print("Server is listening on port 6379")
 
-while True:
+    while True:
         connection, address = server_socket.accept()
         print(f"Accepted connection from {address}")
         thread= threading.Thread(target=handle_client, args=(connection, address))

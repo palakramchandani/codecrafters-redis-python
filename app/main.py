@@ -5,6 +5,7 @@ import time# noqa: F401
 data_store = {}
 expiry_store = {}
 NULL_BULK_STRING = b'$-1\r\n'
+length = 0
 
 def parse_resp(data):
     lines=data.split(b'\r\n')
@@ -57,10 +58,14 @@ def handle_client(connection,address):
                 key, value = command_parts[1], command_parts[2]
                 if key not in data_store:
                     data_store[key] = [value]
-                    connection.sendall(b':1\r\n')
+                    length = 1   
                 else:
-                    connection.sendall(b'-ERR only new list creation is supported at this stage\r\n')
-
+                    if isinstance(data_store[key], list):
+                        data_store[key].append(value)
+                        length = len(data_store[key])
+                    else:
+                        connection.sendall(b'-ERR value is not a list\r\n')
+                        return
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]

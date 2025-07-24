@@ -34,6 +34,11 @@ def handle_client(connection,address):
                 key, value = command_parts[1], command_parts[2]
                 data_store[key] = value
                 connection.sendall(b'+OK\r\n')
+            elif cmd == 'ECHO' and len(command_parts) == 2:
+                message = command_parts[1]
+                response = to_bulk_string(message)
+                connection.sendall(response)
+
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]
                 if key in data_store:

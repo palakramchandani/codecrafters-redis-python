@@ -45,11 +45,15 @@ def handle_client(connection,address):
                     except (ValueError, IndexError):
                         connection.sendall(b'-ERR invalid PX value\r\n')
                         continue
-                elif key in expiry_store:
-                    del expiry_store[key]
 
                 data_store[key] = value
-                connection.sendall(b'+OK\r\n')
+                if expiry is not None:
+                    expiry_store[key] = expiry
+                elif key in expiry_store:
+                    del expiry_store[key]
+                connection.sendall(b'+OK\r\n')    
+
+                
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]
                 response = to_bulk_string(message)

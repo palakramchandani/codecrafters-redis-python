@@ -59,7 +59,7 @@ def handle_client(connection,address):
                     data_store[key] = [value]
                     connection.sendall(b':1\r\n')
                 else:
-                connection.sendall(b'-ERR only new list creation is supported at this stage\r\n')
+                    connection.sendall(b'-ERR only new list creation is supported at this stage\r\n')
 
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:

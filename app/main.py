@@ -1,5 +1,6 @@
 import socket 
-import threading # noqa: F401
+import threading 
+import time# noqa: F401
 
 def parse_resp(data):
     lines=data.split(b'\r\n')
@@ -30,8 +31,19 @@ def handle_client(connection,address):
                 
                 continue
             cmd=command_parts[0].upper()
-            if cmd=='SET' and len(command_parts) == 3:
+            if cmd=='SET' and len(command_parts)>= 3:
                 key, value = command_parts[1], command_parts[2]
+                expiry = None
+                if len(command_parts) >=5 and command_parts[3].upper() == 'PX':
+                    try:
+                        px=int(command_parts[4])
+                        expiry = int(time.time() * 1000) + px
+                    except (ValueError, IndexError):
+                        connection.sendall(b'-ERR invalid PX value\r\n')
+                        continue
+                elif key in expiry_store:
+                    del expiry_store[key]
+
                 data_store[key] = value
                 connection.sendall(b'+OK\r\n')
             elif cmd == 'ECHO' and len(command_parts) == 2:
@@ -44,7 +56,11 @@ def handle_client(connection,address):
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]
-                if key in data_store:
+                if key in expiry_store and current_time>expiry_store[key]:
+                    del data_store[key]
+                    del expiry_store[key]
+                    response = b'$-1\r\n'
+                elif key in data_store:
                     response = to_bulk_string(data_store[key])
                 else:
                     response = b'$-1\r\n'
@@ -55,7 +71,7 @@ def handle_client(connection,address):
         connection.close()
 
 data_store = {}
-    
+expiry_store = {}    
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     server_socket.listen()

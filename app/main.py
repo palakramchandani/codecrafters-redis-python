@@ -55,13 +55,14 @@ def handle_client(connection,address):
                 connection.sendall(b'+OK\r\n')    
 
             elif cmd == 'RPUSH' and len(command_parts) == 3:
-                key, value = command_parts[1], command_parts[2]
+                key= command_parts[1]
+                values = command_parts[2:]
                 if key not in data_store:
-                    data_store[key] = [value]
-                    length = 1   
+                    data_store[key] = values[:]
+                    length = len(data_store[key]) 
                 else:
                     if isinstance(data_store[key], list):
-                        data_store[key].append(value)
+                        data_store[key].extend(values)
                         length = len(data_store[key])
                     else:
                         connection.sendall(b'-ERR value is not a list\r\n')

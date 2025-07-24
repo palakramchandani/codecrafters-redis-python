@@ -40,6 +40,7 @@ def handle_client(connection,address):
                     response = to_bulk_string(data_store[key])
                 else:
                     response = b'$-1\r\n'
+                connection.sendall(response)
             else:
                 connection.sendall(b'-ERR unknown command\r\n')
     finally:

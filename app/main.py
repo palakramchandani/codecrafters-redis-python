@@ -2,6 +2,10 @@ import socket
 import threading 
 import time# noqa: F401
 
+data_store = {}
+expiry_store = {}
+NULL_BULK_STRING = b'$-1\r\n'
+
 def parse_resp(data):
     lines=data.split(b'\r\n')
     if not lines or lines[0][0] != ord('*'):
@@ -56,22 +60,20 @@ def handle_client(connection,address):
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]
-                if key in expiry_store and current_time>expiry_store[key]:
+                current_time = int(time.time() * 1000)
+                if key in expiry_store and current_time > expiry_store[key]:
                     del data_store[key]
                     del expiry_store[key]
-                    response = b'$-1\r\n'
+                    response = NULL_BULK_STRING
                 elif key in data_store:
                     response = to_bulk_string(data_store[key])
                 else:
                     response = b'$-1\r\n'
                 connection.sendall(response)
-            else:
-                connection.sendall(b'-ERR unknown command\r\n')
     finally:
         connection.close()
 
-data_store = {}
-expiry_store = {}    
+   
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     server_socket.listen()

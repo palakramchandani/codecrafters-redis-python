@@ -5,7 +5,6 @@ import time# noqa: F401
 data_store = {}
 expiry_store = {}
 NULL_BULK_STRING = b'$-1\r\n'
-length = 0
 
 def parse_resp(data):
     lines=data.split(b'\r\n')
@@ -54,7 +53,7 @@ def handle_client(connection,address):
                     del expiry_store[key]
                 connection.sendall(b'+OK\r\n')    
 
-            elif cmd == 'RPUSH' and len(command_parts) == 3:
+            elif cmd == 'RPUSH' and len(command_parts) >= 3:
                 key= command_parts[1]
                 values = command_parts[2:]
                 if key not in data_store:

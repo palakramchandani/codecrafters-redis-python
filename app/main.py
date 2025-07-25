@@ -95,7 +95,11 @@ def handle_client(connection,address):
                         response += f"${len(item)}\r\n{item}\r\n"
                     connection.sendall(response.encode())
             elif cmd == "LPUSH":
+                    key = command_parts[1]
                     values = command_parts[2:]
+                    if key not isinstance(data_store[key], list):
+                        connection.sendall(b'-ERR value is not a list\r\n')
+                        continue
                     data_store.setdefault(key, [])
                     for val in reversed(values):
                         data_store[key].insert(0, val)

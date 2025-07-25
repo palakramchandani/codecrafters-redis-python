@@ -102,7 +102,7 @@ def handle_client(connection,address):
                     if not isinstance(data_store[key], list):
                         connection.sendall(b'-ERR value is not a list\r\n')
                         continue
-                    for val in reversed(values):
+                    for val in values:
                         data_store[key].insert(0, val)
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 

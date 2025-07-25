@@ -94,12 +94,12 @@ def handle_client(connection,address):
                     for item in result:
                         response += f"${len(item)}\r\n{item}\r\n"
                     connection.sendall(response.encode())
-            elif command == "LPUSH":
-                    values = data[2:]
-                    store.setdefault(key, [])
-                    for val in reversed(values):  
-                        store[key].insert(0, val)
-                    conn.sendall(encode_resp(len(store[key])))
+            elif cmd == "LPUSH":
+                    values = command_parts[2:]
+                    data_store.setdefault(key, [])
+                    for val in reversed(values):
+                        data_store[key].insert(0, val)
+                    connection.sendall(encode_resp(len(data_store[key])))
 
 
             elif cmd == 'GET' and len(command_parts) == 2:

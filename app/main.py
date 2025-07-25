@@ -104,7 +104,7 @@ def handle_client(connection,address):
                         continue
                     for val in reversed(values):
                         data_store[key].insert(0, val)
-                    connection.sendall(encode_resp(len(data_store[key])))
+                    connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 
 
             elif cmd == 'GET' and len(command_parts) == 2:

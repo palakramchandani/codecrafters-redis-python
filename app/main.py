@@ -77,35 +77,23 @@ def handle_client(connection,address):
                 connection.sendall(b'+PONG\r\n')
 
             elif cmd == 'LRANGE' and len(command_parts) == 4:
-                key = command_parts[1]
-                start = int(command_parts[2])
-                stop = int(command_parts[3])
+                    key = command_parts[1]
+                    start = int(command_parts[2])
+                    end = int(command_parts[3])
 
-                if key not in data_store or not isinstance(data_store[key], list):
-                    connection.sendall(b'*0\r\n')  
-                    return
-                if start < 0:
-                    start = max(0, list_len + start)
-                if stop < 0:
-                    stop = list_len + stop
+                    if key not in data_store or not isinstance(data_store[key], list):
+                        connection.sendall(b"*0\r\n")
+                        continue
 
-                full_list = data_store[key]
-                list_len = len(full_list)
-                stop = min(stop, list_len - 1)
+                    lst = data_store[key]
+                    if end < 0:
+                        end = len(lst) + end
+                    result = lst[start:end + 1] if end >= start else []
 
-                if start >= list_len or start > stop:
-                    connection.sendall(b'*0\r\n')  
-                    return
-
-                
-                stop = min(stop, list_len - 1)
-
-                result = full_list[start:stop+1]
-
-                response = f"*{len(result)}\r\n"
-                for item in result:
-                    response += f"${len(item)}\r\n{item}\r\n"
-                connection.sendall(response.encode())
+                    response = f"*{len(result)}\r\n"
+                    for item in result:
+                        response += f"${len(item)}\r\n{item}\r\n"
+                    connection.sendall(response.encode())
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

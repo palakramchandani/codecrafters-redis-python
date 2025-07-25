@@ -89,9 +89,9 @@ def handle_client(connection,address):
                 if stop < 0:
                     stop = list_len + stop
 
-                stop = min(stop, list_len - 1)
                 full_list = data_store[key]
                 list_len = len(full_list)
+                stop = min(stop, list_len - 1)
 
                 if start >= list_len or start > stop:
                     connection.sendall(b'*0\r\n')  

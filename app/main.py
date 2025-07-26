@@ -21,6 +21,12 @@ def parse_resp(data):
         else:
             i+=1
     return parts
+def encode_resp_array(elements):
+    resp = f"*{len(elements)}\r\n"
+    for elem in elements:
+        resp += f"${len(elem)}\r\n{elem}\r\n"
+    return resp.encode()
+
 def to_bulk_string(message):
     return f"${len(message)}\r\n{message}\r\n".encode()
 
@@ -140,7 +146,7 @@ def handle_client(connection,address):
                     popped=[]
                     while len(popped) < count and values:
                         popped.append(values.pop(0))
-                    connection.sendall(to_bulk_string(popped))
+                    connection.sendall(encode_resp_array(popped))
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

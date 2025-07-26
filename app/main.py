@@ -180,8 +180,7 @@ def handle_client(connection,address):
                     response = encode_resp_array([key, value])
                     connection.sendall(response)
                 else:
-                    waiting_clients[key].append((connection, key))
-                    return  
+                    waiting_clients[key].append((connection, key)) 
 
 
             elif cmd == 'GET' and len(command_parts) == 2:

@@ -136,16 +136,22 @@ def handle_client(connection,address):
                     except ValueError:
                         connection.sendall(b'-ERR value is not an integer or out of range\r\n')
                         continue
-                    if key not in data_store:
-                        connection.sendall(b'*0\r\n')
-                        continue
-                    values = data_store[key]
-                    if not isinstance(values, list):
-                        connection.sendall(b'-ERR value is not a list\r\n')
-                        continue
-                    popped=[]
-                    while len(popped) < count and values:
-                        popped.append(values.pop(0))
+                if key not in data_store:
+                    connection.sendall(b'*0\r\n')
+                    continue
+                values = data_store[key]
+                if not isinstance(values, list):
+                    connection.sendall(b'-ERR value is not a list\r\n')
+                    continue
+                popped=[]
+                while len(popped) < count and values:
+                    popped.append(values.pop(0))
+                if len(command_parts) == 2:
+                    if popped:
+                        connection.sendall(to_bulk_string(popped[0]))
+                    else:
+                        connection.sendall(NULL_BULK_STRING)
+                else:
                     connection.sendall(encode_resp_array(popped))
 
             elif cmd == 'GET' and len(command_parts) == 2:

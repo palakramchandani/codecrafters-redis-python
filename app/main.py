@@ -116,21 +116,30 @@ def handle_client(connection,address):
                 else:
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
             elif cmd=='LPOP' :
-                if len(command_parts) != 2:
+                if len(command_parts) not in (2, 3):
                     connection.sendall(b'-ERR wrong number of arguments for \'lpop\' command\r\n')
                     continue
 
                 key = command_parts[1]
-                if key not in data_store:
-                    connection.sendall(NULL_BULK_STRING)
-                else:
-                    value = data_store[key]
-                if not isinstance(value, list):
-                    connection.sendall(b'-ERR value is not a list\r\n')
-                elif len(value) == 0:
-                    connection.sendall(NULL_BULK_STRING)
-                else:
-                    popped = value.pop(0)
+                count=1
+                if len(command_parts) == 3:
+                    try:
+                        count = int(command_parts[2])
+                        if count<0:
+                            raise ValueError
+                    except ValueError:
+                        connection.sendall(b'-ERR value is not an integer or out of range\r\n')
+                        continue
+                    if key not in data_store:
+                        connection.sendall(b'*0\r\n')
+                        continue
+                    values = data_store[key]
+                    if not isinstance(values, list):
+                        connection.sendall(b'-ERR value is not a list\r\n')
+                        continue
+                    popped=[]
+                    while len(popped) < count and values:
+                        popped.append(values.pop(0))
                     connection.sendall(to_bulk_string(popped))
 
             elif cmd == 'GET' and len(command_parts) == 2:

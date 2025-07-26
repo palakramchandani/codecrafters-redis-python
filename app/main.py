@@ -106,6 +106,12 @@ def handle_client(connection,address):
                         data_store[key].insert(0, val)
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 
+            elif cmd=='LLEN' and len(command_parts) == 2:
+                key = command_parts[1]
+                if key in data_store and isinstance(data_store[key], list):
+                    connection.sendall(f':{len(data_store[key])}\r\n'.encode())
+                else:
+                    connection.sendall(b'-ERR key is not a list\r\n')
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

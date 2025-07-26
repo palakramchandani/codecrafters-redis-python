@@ -1,10 +1,14 @@
 import socket 
 import threading 
-import time# noqa: F401
+import time#
+from collections import defaultdict
 
+
+waiting_clients = defaultdict(list)
 data_store = {}
 expiry_store = {}
 NULL_BULK_STRING = b'$-1\r\n'
+
 
 def parse_resp(data):
     lines=data.split(b'\r\n')
@@ -74,6 +78,15 @@ def handle_client(connection,address):
                         return
                     
                 connection.sendall(f':{length}\r\n'.encode())
+                if waiting_clients[key]:
+                    blocked_connection, blocked_key = waiting_clients[key].pop(0)
+                    if data_store[key]:
+                        value = data_store[key].pop(0)
+                        response = encode_resp_array([key, value])
+                        try:
+                            blocked_connection.sendall(response)
+                        except:
+                            pass  
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]
@@ -121,6 +134,8 @@ def handle_client(connection,address):
                     connection.sendall(b'-ERR value is not a list\r\n')
                 else:
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
+            
+            
             elif cmd=='LPOP' :
                 if len(command_parts) not in (2, 3):
                     connection.sendall(b'-ERR wrong number of arguments for \'lpop\' command\r\n')
@@ -153,6 +168,21 @@ def handle_client(connection,address):
                         connection.sendall(NULL_BULK_STRING)
                 else:
                     connection.sendall(encode_resp_array(popped))
+
+
+
+            elif cmd == 'BLPOP' and len(command_parts) == 3:
+                key = command_parts[1]
+                timeout = int(command_parts[2])
+                            
+                if key in data_store and isinstance(data_store[key], list) and data_store[key]:
+                    value = data_store[key].pop(0)
+                    response = encode_resp_array([key, value])
+                    connection.sendall(response)
+                else:
+                    waiting_clients[key].append((connection, key))
+                    return  
+
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

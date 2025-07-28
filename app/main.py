@@ -245,7 +245,7 @@ def handle_client(connection,address):
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 
             elif cmd == 'XREAD':
-                block = None # block timeout in milliseconds, 0 means block forever
+                block = None # None means no blocking, 0 means block forever
                 idx = 1
 
                 # Detect BLOCK option if present
@@ -271,20 +271,32 @@ def handle_client(connection,address):
                     connection.sendall(b'-ERR number of streams and IDs do not match\r\n')
                     continue
 
+                # Resolve '$' IDs at the start of XREAD
+                resolved_last_ids = []
+                for stream_key, last_id_str in zip(keys, last_ids):
+                    if last_id_str == '$':
+                        if stream_key in data_store and is_stream(data_store[stream_key]):
+                            stream = data_store[stream_key]
+                            if stream:
+                                # Use the last entry ID in the stream at this moment
+                                resolved_last_ids.append(stream[-1][0])
+                            else:
+                                # Empty stream
+                                resolved_last_ids.append('0-0')
+                        else:
+                            # Stream doesn't exist
+                            resolved_last_ids.append('0-0')
+                    else:
+                        resolved_last_ids.append(last_id_str)
+
                 def check_new_entries():
                     results = []
-                    for stream_key, last_id_str in zip(keys, last_ids):
+                    for stream_key, last_id_str in zip(keys, resolved_last_ids):
                         if stream_key not in data_store or not is_stream(data_store[stream_key]):
                             results.append((stream_key, []))
                             continue
                         stream = data_store[stream_key]
 
-                        # Handle special last_id == '$'
-                        if last_id_str == '$':
-                            if stream:
-                                last_id_str = stream[-1][0]  # last entry ID in stream
-                            else:
-                                last_id_str = '0-0'
                         parsed = parse_entry_id(last_id_str)
                         if parsed is None:
                             connection.sendall(b'-ERR invalid ID format\r\n')
@@ -304,7 +316,7 @@ def handle_client(connection,address):
                     continue  # error already sent
 
                 # If any entries found or no blocking requested, send response immediately
-                if any(len(entries) > 0 for _, entries in resp_data) or block == None:
+                if any(len(entries) > 0 for _, entries in resp_data) or block is None:
                     if all(len(entries) == 0 for _, entries in resp_data):
                         # No entries found and no blocking: respond with empty array
                         connection.sendall(b'*0\r\n')
@@ -323,12 +335,12 @@ def handle_client(connection,address):
                                     resp += f"${len(value)}\r\n{value}\r\n"
                         connection.sendall(resp.encode())
                 else:
-                    # Blocking requested with timeout > 0 or infinite (0)
+                    # Blocking requested
                     start_time = time.time()
-                    timeout_sec = block / 1000.0
-                    remaining = timeout_sec
+                    timeout_sec = block / 1000.0 if block > 0 else None
 
                     while True:
+                        # Wait for notifications on any of the monitored streams
                         notified = False
                         for key in keys:
                             cond = stream_conditions[key]
@@ -337,12 +349,25 @@ def handle_client(connection,address):
                                     # Wait infinitely
                                     cond.wait()
                                     notified = True
+                                    break
                                 else:
-                                    notified = cond.wait(remaining)
-                            if notified:
+                                    # Wait with timeout
+                                    remaining = timeout_sec - (time.time() - start_time) if timeout_sec else 0
+                                    if remaining <= 0:
+                                        break
+                                    if cond.wait(remaining):
+                                        notified = True
+                                        break
+
+                        # Check timeout
+                        if block > 0:
+                            elapsed = time.time() - start_time
+                            if elapsed >= timeout_sec:
+                                # Timeout expired, no new entries
+                                connection.sendall(b"$-1\r\n")
                                 break
 
-                        # After waking, check if new entries arrived
+                        # After waking (or timeout check), check if new entries arrived
                         resp_data = check_new_entries()
                         if resp_data is None:
                             break  # error was sent
@@ -364,14 +389,9 @@ def handle_client(connection,address):
                             connection.sendall(resp.encode())
                             break
 
-                        # Update remaining timeout if blocking with timeout
-                        if block != 0:
-                            remaining = timeout_sec - (time.time() - start_time)
-                            if remaining <= 0:
-                                # Timeout expired, no new entries
-                                connection.sendall(b"$-1\r\n")
-                                break
-                        # If block == 0 (infinite block), loop continues waiting
+                        # If not notified and no timeout, something went wrong
+                        if not notified and block == 0:
+                            continue  # Keep waiting for infinite block
 
             elif cmd=='LLEN' and len(command_parts) == 2:
                 key = command_parts[1]

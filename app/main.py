@@ -34,7 +34,9 @@ def parse_entry_id(entry_id):
     try:
         ms_str, seq_str = entry_id.split('-')
         ms = int(ms_str)
-        seq = int(seq_str)
+        seq = seq_str
+        if seq!='*':
+            seq = int(seq_str)
         return ms, seq
     except Exception:
         return None
@@ -196,63 +198,80 @@ def handle_client(connection,address):
                     continue
 
                 key = command_parts[1]
-                entry_id = command_parts[2]
+                entry_id_raw = command_parts[2]
                 field_values = command_parts[3:]
 
-                # Validate entry_id format
-                parsed_id = parse_entry_id(entry_id)
-                if parsed_id is None:
+                # Parse entry ID parts (allowing "*" for sequence)
+                parsed = parse_entry_id(entry_id_raw)
+                if parsed is None:
                     connection.sendall(b'-ERR invalid ID format\r\n')
                     continue
+                ms, seq = parsed
 
-                ms, seq = parsed_id
+                # Auto-generate sequence number if seq == '*'
+                if seq == '*':
+                    last_seq = -1
+                    if key in data_store and is_stream(data_store[key]):
+                        stream = data_store[key]
+                        # Iterate in reverse to find last seq for ms
+                        for last_entry_id, _ in reversed(stream):
+                            last_ms, last_seq_candidate = parse_entry_id(last_entry_id)
+                            if last_ms == ms:
+                                if last_seq_candidate > last_seq:
+                                    last_seq = last_seq_candidate
+                            elif last_ms < ms:
+                                break
+                    # Compute appropriate sequence number
+                    if ms == 0:
+                        new_seq = 1
+                    else:
+                        new_seq = last_seq + 1 if last_seq >= 0 else 0
+
+                    # Update entry_id to explicit full ID string
+                    entry_id = f"{ms}-{new_seq}"
+                    # Replace ms and seq with ints now
+                    ms = int(ms)
+                    seq = new_seq
+                else:
+                    # seq already int from parsing above
+                    entry_id = entry_id_raw
+                    if not (isinstance(seq, int)):
+                        connection.sendall(b'-ERR invalid ID format\r\n')
+                        continue
+
                 # Check minimal allowed ID
                 if ms == 0 and seq == 0:
                     connection.sendall(b'-ERR The ID specified in XADD must be greater than 0-0\r\n')
                     continue
 
-                # Parse fields
+                # Parse fields into dict
                 fields = {}
                 for i in range(0, len(field_values), 2):
                     fields[field_values[i]] = field_values[i+1]
 
-                # If key does not exist, create as stream
+                # Create stream if missing
                 if key not in data_store:
                     data_store[key] = []
 
-                # Confirm type safety: if key exists, must be a stream (a list of (id, dict))
                 value = data_store[key]
                 if not is_stream(value):
                     connection.sendall(b'-ERR key exists and is not a stream\r\n')
                     continue
-                
-                
-                if value:  
+
+                # Validate ID ordering if stream has entries
+                if value:
                     last_id, _ = value[-1]
                     last_ms, last_seq = parse_entry_id(last_id)
-                    # Check if new ID is greater
                     if not ((ms > last_ms) or (ms == last_ms and seq > last_seq)):
                         connection.sendall(b'-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n')
                         continue
-                data_store[key].append( (entry_id, fields) )
+
+                # Append new entry
+                data_store[key].append((entry_id, fields))
 
                 # Reply with ID as RESP bulk string
                 resp = f"${len(entry_id)}\r\n{entry_id}\r\n".encode()
                 connection.sendall(resp)
-
-
-            elif cmd == "TYPE" and len(command_parts) == 2:
-                key = command_parts[1]
-                if key not in data_store:
-                    connection.sendall(b'+none\r\n')
-                else:
-                    value = data_store[key]
-                    if is_stream(value):
-                        connection.sendall(b'+stream\r\n')  # Placeholder for stream type
-                    elif isinstance(value, list):
-                        connection.sendall(b'+list\r\n')
-                    else:
-                        connection.sendall(b'+string\r\n')
 
             elif cmd == 'BLPOP' and len(command_parts) == 3:
                 key = command_parts[1]

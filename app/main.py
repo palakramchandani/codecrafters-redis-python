@@ -403,10 +403,11 @@ def handle_client(connection,address):
                 if len(command_parts) < 5 or (len(command_parts)-3) % 2 != 0:
                     connection.sendall(b'-ERR wrong number of arguments for XADD\r\n')
                     continue
+                
+                key = command_parts[1]
                 if key in stream_conditions:
                     with stream_conditions[key]:
                         stream_conditions[key].notify_all()
-                key = command_parts[1]
                 entry_id_raw = command_parts[2]
                 field_values = command_parts[3:]
 

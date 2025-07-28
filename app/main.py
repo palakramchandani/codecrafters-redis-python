@@ -30,7 +30,15 @@ def encode_resp_array(elements):
     for elem in elements:
         resp += f"${len(elem)}\r\n{elem}\r\n"
     return resp.encode()
-
+def parse_entry_id(entry_id):
+    try:
+        ms_str, seq_str = entry_id.split('-')
+        ms = int(ms_str)
+        seq = int(seq_str)
+        return ms, seq
+    except Exception:
+        return None
+    
 def to_bulk_string(message):
     return f"${len(message)}\r\n{message}\r\n".encode()
 def is_stream(obj):
@@ -191,6 +199,18 @@ def handle_client(connection,address):
                 entry_id = command_parts[2]
                 field_values = command_parts[3:]
 
+                # Validate entry_id format
+                parsed_id = parse_entry_id(entry_id)
+                if parsed_id is None:
+                    connection.sendall(b'-ERR invalid ID format\r\n')
+                    continue
+
+                ms, seq = parsed_id
+                # Check minimal allowed ID
+                if ms == 0 and seq == 0:
+                    connection.sendall(b'-ERR The ID specified in XADD must be greater than 0-0\r\n')
+                    continue
+
                 # Parse fields
                 fields = {}
                 for i in range(0, len(field_values), 2):
@@ -205,7 +225,15 @@ def handle_client(connection,address):
                 if not is_stream(value):
                     connection.sendall(b'-ERR key exists and is not a stream\r\n')
                     continue
-
+                
+                
+                if value:  
+                    last_id, _ = value[-1]
+                    last_ms, last_seq = parse_entry_id(last_id)
+                    # Check if new ID is greater
+                    if not ((ms > last_ms) or (ms == last_ms and seq > last_seq)):
+                        connection.sendall(b'-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n')
+                        continue
                 data_store[key].append( (entry_id, fields) )
 
                 # Reply with ID as RESP bulk string

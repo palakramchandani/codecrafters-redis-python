@@ -118,6 +118,9 @@ def handle_client(connection,address):
                 start_id_str = command_parts[2]
                 end_id_str = command_parts[3]
 
+                if start_id_str == '-':
+                    start_id_str = '0-0'
+
                 # Check stream existence
                 if key not in data_store or not is_stream(data_store[key]):
                     # Return empty array if key missing or not a stream

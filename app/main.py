@@ -33,7 +33,16 @@ def encode_resp_array(elements):
 
 def to_bulk_string(message):
     return f"${len(message)}\r\n{message}\r\n".encode()
-
+def is_stream(obj):
+                # Helper: True if obj is a stream (list of (id, dict) tuples); False otherwise
+                # Rudimentary check only for this challenge!
+                if not isinstance(obj, list):
+                    return False
+                # Empty stream is still a stream
+                if len(obj) == 0:
+                    return True
+                first = obj[0]
+                return (isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict))
 def handle_client(connection,address):
     try:
         while True:
@@ -170,17 +179,50 @@ def handle_client(connection,address):
                     connection.sendall(encode_resp_array(popped))
 
 
+            
+
+
+            elif cmd == "XADD":
+                if len(command_parts) < 5 or (len(command_parts)-3) % 2 != 0:
+                    connection.sendall(b'-ERR wrong number of arguments for XADD\r\n')
+                    continue
+
+                key = command_parts[1]
+                entry_id = command_parts[2]
+                field_values = command_parts[3:]
+
+                # Parse fields
+                fields = {}
+                for i in range(0, len(field_values), 2):
+                    fields[field_values[i]] = field_values[i+1]
+
+                # If key does not exist, create as stream
+                if key not in data_store:
+                    data_store[key] = []
+
+                # Confirm type safety: if key exists, must be a stream (a list of (id, dict))
+                value = data_store[key]
+                if not is_stream(value):
+                    connection.sendall(b'-ERR key exists and is not a stream\r\n')
+                    continue
+
+                data_store[key].append( (entry_id, fields) )
+
+                # Reply with ID as RESP bulk string
+                resp = f"${len(entry_id)}\r\n{entry_id}\r\n".encode()
+                connection.sendall(resp)
+
+
             elif cmd == "TYPE" and len(command_parts) == 2:
                 key = command_parts[1]
                 if key not in data_store:
                     connection.sendall(b'+none\r\n')
                 else:
                     value = data_store[key]
-                    # Only "string" and "none" for now; treat all non-list as string
-                    if isinstance(value, list):
-                        # For this stage, don't need to handle lists. If you want, can return "none" here,
-                        # but in later stages, you'll map this to "list".
-                        connection.sendall(b'+string\r\n')   # Remove this if/when you implement "list" type!
+                    if is_stream(value):
+                        connection.sendall(b'+stream\r\n')  # Placeholder for stream type
+                    elif isinstance(value, list):
+                        connection.sendall(b'+list\r\n')
                     else:
                         connection.sendall(b'+string\r\n')
 

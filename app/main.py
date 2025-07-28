@@ -42,6 +42,10 @@ def parse_entry_id(entry_id):
         return None
 def parse_entry_id_with_default(entry_id_str, default_seq_for_end=False):
     MAX_SEQ = 18446744073709551615  # Max 64-bit unsigned int
+    MAX_MS = 9223372036854775807   # Approx max int64 ms timestamp (can use a large number)
+    if entry_id_str == '+':
+        # Return maximum possible ID
+        return MAX_MS, MAX_SEQ
     if '-' in entry_id_str:
         ms_str, seq_str = entry_id_str.split('-')
         ms = int(ms_str)

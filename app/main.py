@@ -276,6 +276,74 @@ def handle_client(connection,address):
 
                 connection.sendall(resp.encode())
 
+            elif cmd == "XREAD":
+                # Expected usage: XREAD STREAMS key1 key2 ... id1 id2 ...
+                if len(command_parts) < 4:
+                    connection.sendall(b'-ERR wrong number of arguments for XREAD\r\n')
+                    continue
+
+                if command_parts[1].lower() != 'streams':
+                    connection.sendall(b'-ERR syntax error\r\n')
+                    continue
+
+                # Parse keys and last IDs
+                # Syntax: XREAD STREAMS key1 key2 ... id1 id2 ...
+                # Number of keys = (len(command_parts) - 2) // 2
+                total_args = len(command_parts)
+                # keys start at index 2
+                # last IDs start at index 2 + num_keys
+                num_keys = (total_args - 2) // 2
+                keys = command_parts[2:2 + num_keys]
+                last_ids = command_parts[2 + num_keys:2 + num_keys * 2]
+
+                if len(keys) != len(last_ids):
+                    connection.sendall(b'-ERR number of keys and IDs mismatch\r\n')
+                    continue
+
+                streams_results = []
+
+                for stream_key, last_id_str in zip(keys, last_ids):
+                    if stream_key not in data_store or not is_stream(data_store[stream_key]):
+                        # If stream not found or not a stream, return empty entries for this stream
+                        streams_results.append((stream_key, []))
+                        continue
+
+                    stream = data_store[stream_key]
+                    # Parse last ID (ms, seq)
+                    parsed = parse_entry_id(last_id_str)
+                    if parsed is None:
+                        connection.sendall(b'-ERR invalid ID format in XREAD\r\n')
+                        break
+                    last_ms, last_seq = parsed
+
+                    # Collect entries with ID > last_id
+                    entries = []
+                    for entry_id, fields in stream:
+                        ms, seq = parse_entry_id(entry_id)
+                        if (ms > last_ms) or (ms == last_ms and seq > last_seq):
+                            entries.append((entry_id, fields))
+
+                    streams_results.append((stream_key, entries))
+
+                else:
+                    # No errors, encode the full response
+                    # Outer RESP array: number of streams
+                    resp = f"*{len(streams_results)}\r\n"
+                    for stream_key, entries in streams_results:
+                        # Each stream array: 2 elements: key, list of entries
+                        resp += "*2\r\n"
+                        resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
+                        # Entries array
+                        resp += f"*{len(entries)}\r\n"
+                        for entry_id, fields in entries:
+                            resp += "*2\r\n"
+                            resp += f"${len(entry_id)}\r\n{entry_id}\r\n"
+                            resp += f"*{len(fields) * 2}\r\n"
+                            for field, value in fields.items():
+                                resp += f"${len(field)}\r\n{field}\r\n"
+                                resp += f"${len(value)}\r\n{value}\r\n"
+                    connection.sendall(resp.encode())
+
 
             elif cmd=='LLEN' and len(command_parts) == 2:
                 key = command_parts[1]

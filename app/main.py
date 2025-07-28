@@ -107,6 +107,21 @@ def handle_client(connection,address):
                         pass
                     event.set()  # Notify the waiting client that data is available
 
+            elif cmd == "TYPE" and len(command_parts) == 2:
+                key = command_parts[1]
+                if key not in data_store:
+                    connection.sendall(b'+none\r\n')
+                else:
+                    value = data_store[key]
+                    if is_stream(value):
+                        connection.sendall(b'+stream\r\n')
+                    elif isinstance(value, list):
+                        connection.sendall(b'+list\r\n')
+                    else:
+                        connection.sendall(b'+string\r\n')
+
+
+
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]
                 response = to_bulk_string(message)

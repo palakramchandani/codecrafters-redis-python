@@ -183,6 +183,14 @@ def handle_client(connection,address):
                         pass
                     event.set()  # Notify the waiting client that data is available
 
+
+
+
+        
+
+
+
+
             elif cmd == "TYPE" and len(command_parts) == 2:
                 key = command_parts[1]
                 if key not in data_store:
@@ -234,6 +242,40 @@ def handle_client(connection,address):
                     for val in values:
                         data_store[key].insert(0, val)
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
+
+            elif cmd == "XREAD" and len(command_parts) == 4 and command_parts[1].lower() == 'streams':
+                stream_key = command_parts[2]
+                last_id_str = command_parts[3]
+                if stream_key not in data_store or not is_stream(data_store[stream_key]):
+                    # RESP nil reply for missing stream
+                    connection.sendall(b"*0\r\n")
+                    return
+
+                stream = data_store[stream_key]
+                # Parse the last_id as (ms, seq)
+                ms_id, seq_id = parse_entry_id(last_id_str)
+                result_entries = []
+                for entry_id, fields in stream:
+                    ms_e, seq_e = parse_entry_id(entry_id)
+                    # Only include entries with (ms, seq) > (ms_id, seq_id)
+                    if (ms_e > ms_id) or (ms_e == ms_id and seq_e > seq_id):
+                        result_entries.append((entry_id, fields))
+
+                # Build RESP response
+                resp = f"*1\r\n"                              # One stream returned
+                resp += f"*2\r\n"
+                resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
+                resp += f"*{len(result_entries)}\r\n"
+                for entry_id, fields in result_entries:
+                    resp += "*2\r\n"
+                    resp += f"${len(entry_id)}\r\n{entry_id}\r\n"
+                    resp += f"*{len(fields)*2}\r\n"
+                    for f, v in fields.items():
+                        resp += f"${len(f)}\r\n{f}\r\n"
+                        resp += f"${len(v)}\r\n{v}\r\n"
+
+                connection.sendall(resp.encode())
+
 
             elif cmd=='LLEN' and len(command_parts) == 2:
                 key = command_parts[1]

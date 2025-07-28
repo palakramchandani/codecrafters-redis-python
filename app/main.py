@@ -186,15 +186,18 @@ def handle_client(connection,address):
                 else:
                     event=threading.Event()
                     waiting_clients[key].append((connection, key, event))
-                    if not event.wait(timeout):
-                        try:
-                            waiting_clients[key].remove((connection, key, event))
-                        except ValueError:
-                            pass
-                        try:
-                            connection.sendall(NULL_BULK_STRING)
-                        except:
-                            pass
+                    if timeout==0:
+                        event.wait() 
+                    else: 
+                        if not event.wait(timeout):
+                            try:
+                                waiting_clients[key].remove((connection, key, event))
+                            except ValueError:
+                                pass
+                            try:
+                                connection.sendall(NULL_BULK_STRING)
+                            except:
+                                pass
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

@@ -78,17 +78,16 @@ def handle_client(connection,address):
                         return
                     
                 connection.sendall(f':{length}\r\n'.encode())
-                if waiting_clients[key]:
-                    blocked_connection, blocked_key,event = waiting_clients[key].pop(0)
-                    if data_store[key]:
-                        value = data_store[key].pop(0)
-                        response = encode_resp_array([key, value])
-                        try:
-                            blocked_connection.sendall(response)
-                        except:
-                            pass  
-                        event.set()  # Notify the waiting client that data is available
-                
+                while waiting_clients[key] and isinstance(data_store.get(key), list) and data_store[key]:
+                    blocked_connection, blocked_key, event = waiting_clients[key].pop(0)
+                    value = data_store[key].pop(0)
+                    response = encode_resp_array([key, value])
+                    try:
+                        blocked_connection.sendall(response)
+                    except:
+                        pass
+                    event.set()  # Notify the waiting client that data is available
+
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]
                 response = to_bulk_string(message)

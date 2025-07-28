@@ -170,6 +170,19 @@ def handle_client(connection,address):
                     connection.sendall(encode_resp_array(popped))
 
 
+            elif cmd == "TYPE" and len(command_parts) == 2:
+                key = command_parts[1]
+                if key not in data_store:
+                    connection.sendall(b'+none\r\n')
+                else:
+                    value = data_store[key]
+                    # Only "string" and "none" for now; treat all non-list as string
+                    if isinstance(value, list):
+                        # For this stage, don't need to handle lists. If you want, can return "none" here,
+                        # but in later stages, you'll map this to "list".
+                        connection.sendall(b'+string\r\n')   # Remove this if/when you implement "list" type!
+                    else:
+                        connection.sendall(b'+string\r\n')
 
             elif cmd == 'BLPOP' and len(command_parts) == 3:
                 key = command_parts[1]

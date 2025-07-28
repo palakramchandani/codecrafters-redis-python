@@ -245,7 +245,7 @@ def handle_client(connection,address):
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 
             elif cmd == 'XREAD':
-                block = 0  # block timeout in milliseconds, 0 means block forever
+                block = None # block timeout in milliseconds, 0 means block forever
                 idx = 1
 
                 # Detect BLOCK option if present
@@ -298,7 +298,7 @@ def handle_client(connection,address):
                     continue  # error already sent
 
                 # If any entries found or no blocking requested, send response immediately
-                if any(len(entries) > 0 for _, entries in resp_data) or block == 0:
+                if any(len(entries) > 0 for _, entries in resp_data) or block == None:
                     if all(len(entries) == 0 for _, entries in resp_data):
                         # No entries found and no blocking: respond with empty array
                         connection.sendall(b'*0\r\n')
@@ -421,9 +421,6 @@ def handle_client(connection,address):
                     continue
                 
                 key = command_parts[1]
-                if key in stream_conditions:
-                    with stream_conditions[key]:
-                        stream_conditions[key].notify_all()
                 entry_id_raw = command_parts[2]
                 field_values = command_parts[3:]
 
@@ -511,7 +508,9 @@ def handle_client(connection,address):
 
                 # Append new entry
                 data_store[key].append((entry_id, fields))
-
+                if key in stream_conditions:
+                    with stream_conditions[key]:
+                        stream_conditions[key].notify_all()
                 # Reply with ID as RESP bulk string
                 resp = f"${len(entry_id)}\r\n{entry_id}\r\n".encode()
                 connection.sendall(resp)

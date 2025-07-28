@@ -273,6 +273,22 @@ def handle_client(connection,address):
                 resp = f"${len(entry_id)}\r\n{entry_id}\r\n".encode()
                 connection.sendall(resp)
 
+            elif cmd == "TYPE" and len(command_parts) == 2:
+                key = command_parts[1]
+                if key not in data_store:
+                    connection.sendall(b'+none\r\n')
+                else:
+                    value = data_store[key]
+                    if is_stream(value):
+                        connection.sendall(b'+stream\r\n')
+                    elif isinstance(value, list):
+                        connection.sendall(b'+list\r\n')
+                    else:
+                        connection.sendall(b'+string\r\n')
+
+
+
+
             elif cmd == 'BLPOP' and len(command_parts) == 3:
                 key = command_parts[1]
                 try:

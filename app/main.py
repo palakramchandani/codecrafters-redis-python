@@ -40,6 +40,36 @@ def parse_entry_id(entry_id):
         return ms, seq
     except Exception:
         return None
+def parse_entry_id_with_default(entry_id_str, default_seq_for_end=False):
+    MAX_SEQ = 18446744073709551615  # Max 64-bit unsigned int
+    if '-' in entry_id_str:
+        ms_str, seq_str = entry_id_str.split('-')
+        ms = int(ms_str)
+        seq = int(seq_str)
+        return ms, seq
+    else:
+        ms = int(entry_id_str)
+        seq = MAX_SEQ if default_seq_for_end else 0
+        return ms, seq
+def encode_resp_nested_array(entries):
+    # Helper to encode the list of stream entries for XRANGE
+    # entries is a list of tuples: (id_str, {field: value, ...})
+    resp = f"*{len(entries)}\r\n"
+    for entry_id, fields_dict in entries:
+        # Each entry is an array of 2 elements
+        resp += "*2\r\n"
+        # First element: entry ID as bulk string
+        resp += f"${len(entry_id)}\r\n{entry_id}\r\n"
+
+        # Second element: array of field-value strings
+        # Must preserve insertion order, so we use iteration order of dict
+        n_fields = len(fields_dict) * 2
+        resp += f"*{n_fields}\r\n"
+        for field, value in fields_dict.items():
+            resp += f"${len(field)}\r\n{field}\r\n"
+            resp += f"${len(value)}\r\n{value}\r\n"
+
+    return resp.encode()
     
 def to_bulk_string(message):
     return f"${len(message)}\r\n{message}\r\n".encode()
@@ -81,6 +111,45 @@ def handle_client(connection,address):
                 elif key in expiry_store:
                     del expiry_store[key]
                 connection.sendall(b'+OK\r\n')    
+
+
+            elif cmd == "XRANGE" and len(command_parts) >= 4:
+                key = command_parts[1]
+                start_id_str = command_parts[2]
+                end_id_str = command_parts[3]
+
+                # Check stream existence
+                if key not in data_store or not is_stream(data_store[key]):
+                    # Return empty array if key missing or not a stream
+                    connection.sendall(b"*0\r\n")
+                    continue
+
+                stream = data_store[key]
+
+                # Parse IDs with proper default sequence numbers
+                start_ms, start_seq = parse_entry_id_with_default(start_id_str, default_seq_for_end=False)
+                end_ms, end_seq = parse_entry_id_with_default(end_id_str, default_seq_for_end=True)
+
+                # Build the result entries list
+                result_entries = []
+
+                # Iterate over stream entries (assumed sorted by insertion)
+                for entry_id, fields in stream:
+                    # Parse current entry id
+                    entry_ms, entry_seq = parse_entry_id(entry_id)
+                    # Compare with start and end (inclusive)
+                    # Check: start_id <= entry_id <= end_id
+                    # Use (ms, seq) tuple comparisons
+                    if (entry_ms > end_ms) or (entry_ms == end_ms and entry_seq > end_seq):
+                        # Passed end of range, stop early (assuming sorted stream)
+                        break
+                    if (entry_ms > start_ms) or (entry_ms == start_ms and entry_seq >= start_seq):
+                        # Within range, add
+                        result_entries.append((entry_id, fields))
+
+                # Encode and send response
+                response = encode_resp_nested_array(result_entries)
+                connection.sendall(response)
 
             elif cmd == 'RPUSH' and len(command_parts) >= 3:
                 key= command_parts[1]

@@ -245,9 +245,10 @@ def handle_client(connection,address):
                     connection.sendall(f':{len(data_store[key])}\r\n'.encode())
 
             elif cmd == 'XREAD':
-                block = 0  # in milliseconds
+                block = 0  # block timeout in milliseconds, 0 means block forever
                 idx = 1
-                # Detect BLOCK option
+
+                # Detect BLOCK option if present
                 if len(command_parts) > 2 and command_parts[1].upper() == 'BLOCK':
                     try:
                         block = int(command_parts[2])
@@ -256,7 +257,7 @@ def handle_client(connection,address):
                         connection.sendall(b'-ERR invalid BLOCK timeout\r\n')
                         continue
 
-                # Next must be STREAMS
+                # Next token must be 'STREAMS'
                 if len(command_parts) <= idx or command_parts[idx].upper() != 'STREAMS':
                     connection.sendall(b'-ERR syntax error\r\n')
                     continue
@@ -277,6 +278,7 @@ def handle_client(connection,address):
                             results.append((stream_key, []))
                             continue
                         stream = data_store[stream_key]
+
                         parsed = parse_entry_id(last_id_str)
                         if parsed is None:
                             connection.sendall(b'-ERR invalid ID format\r\n')
@@ -290,14 +292,15 @@ def handle_client(connection,address):
                         results.append((stream_key, entries))
                     return results
 
-                # Try to immediately get any new entries
+                # Check for new entries immediately
                 resp_data = check_new_entries()
                 if resp_data is None:
                     continue  # error already sent
 
-                # If data available or no blocking requested, respond immediately
+                # If any entries found or no blocking requested, send response immediately
                 if any(len(entries) > 0 for _, entries in resp_data) or block == 0:
                     if all(len(entries) == 0 for _, entries in resp_data):
+                        # No entries found and no blocking: respond with empty array
                         connection.sendall(b'*0\r\n')
                     else:
                         resp = f"*{len(resp_data)}\r\n"
@@ -314,24 +317,32 @@ def handle_client(connection,address):
                                     resp += f"${len(value)}\r\n{value}\r\n"
                         connection.sendall(resp.encode())
                 else:
-                    # Blocking: wait for notifications on any requested stream or until timeout
+                    # Blocking requested with timeout > 0 or infinite (0)
                     start_time = time.time()
                     timeout_sec = block / 1000.0
                     remaining = timeout_sec
 
-                    while remaining > 0:
+                    while True:
                         notified = False
                         for key in keys:
                             cond = stream_conditions[key]
                             with cond:
-                                notified = cond.wait(remaining)
+                                if block == 0:
+                                    # Wait infinitely
+                                    cond.wait()
+                                    notified = True
+                                else:
+                                    notified = cond.wait(remaining)
                             if notified:
                                 break
-                        # Check if new entries arrived
+
+                        # After waking, check if new entries arrived
                         resp_data = check_new_entries()
                         if resp_data is None:
-                            break  # error sent
+                            break  # error was sent
+
                         if any(len(entries) > 0 for _, entries in resp_data):
+                            # Send new entries response
                             resp = f"*{len(resp_data)}\r\n"
                             for stream_key, entries in resp_data:
                                 resp += f"*2\r\n"
@@ -346,10 +357,15 @@ def handle_client(connection,address):
                                         resp += f"${len(value)}\r\n{value}\r\n"
                             connection.sendall(resp.encode())
                             break
-                        remaining = timeout_sec - (time.time() - start_time)
-                    else:
-                        # Timeout expired without new data
-                        connection.sendall(b"$-1\r\n")
+
+                        # Update remaining timeout if blocking with timeout
+                        if block != 0:
+                            remaining = timeout_sec - (time.time() - start_time)
+                            if remaining <= 0:
+                                # Timeout expired, no new entries
+                                connection.sendall(b"$-1\r\n")
+                                break
+                        # If block == 0 (infinite block), loop continues waiting
 
             elif cmd=='LLEN' and len(command_parts) == 2:
                 key = command_parts[1]

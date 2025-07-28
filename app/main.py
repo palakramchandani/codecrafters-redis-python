@@ -279,6 +279,12 @@ def handle_client(connection,address):
                             continue
                         stream = data_store[stream_key]
 
+                        # Handle special last_id == '$'
+                        if last_id_str == '$':
+                            if stream:
+                                last_id_str = stream[-1][0]  # last entry ID in stream
+                            else:
+                                last_id_str = '0-0'
                         parsed = parse_entry_id(last_id_str)
                         if parsed is None:
                             connection.sendall(b'-ERR invalid ID format\r\n')

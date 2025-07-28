@@ -79,7 +79,7 @@ def handle_client(connection,address):
                     
                 connection.sendall(f':{length}\r\n'.encode())
                 if waiting_clients[key]:
-                    blocked_connection, blocked_key = waiting_clients[key].pop(0)
+                    blocked_connection, blocked_key,event = waiting_clients[key].pop(0)
                     if data_store[key]:
                         value = data_store[key].pop(0)
                         response = encode_resp_array([key, value])
@@ -87,6 +87,7 @@ def handle_client(connection,address):
                             blocked_connection.sendall(response)
                         except:
                             pass  
+                        event.set()  # Notify the waiting client that data is available
                 
             elif cmd == 'ECHO' and len(command_parts) == 2:
                 message = command_parts[1]
@@ -173,15 +174,28 @@ def handle_client(connection,address):
 
             elif cmd == 'BLPOP' and len(command_parts) == 3:
                 key = command_parts[1]
-                timeout = int(command_parts[2])
+                try:
+                    timeout = float(command_parts[2])
+                except ValueError:
+                    connection.sendall(b'-ERR value is not a float\r\n')
+                    continue
                             
                 if key in data_store and isinstance(data_store[key], list) and data_store[key]:
                     value = data_store[key].pop(0)
                     response = encode_resp_array([key, value])
                     connection.sendall(response)
                 else:
-                    waiting_clients[key].append((connection, key)) 
-
+                    event=threading.Event()
+                    waiting_clients[key].append((connection, key, event))
+                    if not event.wait(timeout):
+                        try:
+                            waiting_clients[key].remove((connection, key, event))
+                        except ValueError:
+                            pass
+                        try:
+                            connection.sendall(b'-ERR timeout\r\n')
+                        except:
+                            pass
 
             elif cmd == 'GET' and len(command_parts) == 2:
                 key = command_parts[1]

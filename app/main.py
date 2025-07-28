@@ -193,7 +193,7 @@ def handle_client(connection,address):
                         except ValueError:
                             pass
                         try:
-                            connection.sendall(b'-ERR timeout\r\n')
+                            connection.sendall(NULL_BULK_STRING)
                         except:
                             pass
 

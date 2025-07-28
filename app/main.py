@@ -201,19 +201,16 @@ def handle_client(connection,address):
                 entry_id_raw = command_parts[2]
                 field_values = command_parts[3:]
 
-                # Parse entry ID parts (allowing "*" for sequence)
-                parsed = parse_entry_id(entry_id_raw)
-                if parsed is None:
-                    connection.sendall(b'-ERR invalid ID format\r\n')
-                    continue
-                ms, seq = parsed
+                # Auto-generate full ID if entry_id_raw == "*"
+                if entry_id_raw == '*':
+                    # Get current time in milliseconds
+                    ms = int(time.time() * 1000)
+                    seq = 0
 
-                # Auto-generate sequence number if seq == '*'
-                if seq == '*':
-                    last_seq = -1
                     if key in data_store and is_stream(data_store[key]):
                         stream = data_store[key]
-                        # Iterate in reverse to find last seq for ms
+                        # Find max sequence number for entries with current millisecond time
+                        last_seq = -1
                         for last_entry_id, _ in reversed(stream):
                             last_ms, last_seq_candidate = parse_entry_id(last_entry_id)
                             if last_ms == ms:
@@ -221,23 +218,43 @@ def handle_client(connection,address):
                                     last_seq = last_seq_candidate
                             elif last_ms < ms:
                                 break
-                    # Compute appropriate sequence number
-                    if ms == 0:
-                        new_seq = 1
-                    else:
-                        new_seq = last_seq + 1 if last_seq >= 0 else 0
+                        if last_seq >= 0:
+                            seq = last_seq + 1
 
-                    # Update entry_id to explicit full ID string
-                    entry_id = f"{ms}-{new_seq}"
-                    # Replace ms and seq with ints now
-                    ms = int(ms)
-                    seq = new_seq
+                    entry_id = f"{ms}-{seq}"
                 else:
-                    # seq already int from parsing above
-                    entry_id = entry_id_raw
-                    if not (isinstance(seq, int)):
+                    # Handle previous cases: explicit ID or ms-*
+                    parsed = parse_entry_id(entry_id_raw)
+                    if parsed is None:
                         connection.sendall(b'-ERR invalid ID format\r\n')
                         continue
+                    ms, seq = parsed
+
+                    # Auto-generate sequence number if seq == '*'
+                    if seq == '*':
+                        last_seq = -1
+                        if key in data_store and is_stream(data_store[key]):
+                            stream = data_store[key]
+                            for last_entry_id, _ in reversed(stream):
+                                last_ms, last_seq_candidate = parse_entry_id(last_entry_id)
+                                if last_ms == ms:
+                                    if last_seq_candidate > last_seq:
+                                        last_seq = last_seq_candidate
+                                elif last_ms < ms:
+                                    break
+                        if ms == 0:
+                            new_seq = 1
+                        else:
+                            new_seq = last_seq + 1 if last_seq >= 0 else 0
+
+                        entry_id = f"{ms}-{new_seq}"
+                        ms = int(ms)
+                        seq = new_seq
+                    else:
+                        entry_id = entry_id_raw
+                        if not (isinstance(seq, int)):
+                            connection.sendall(b'-ERR invalid ID format\r\n')
+                            continue
 
                 # Check minimal allowed ID
                 if ms == 0 and seq == 0:
@@ -273,22 +290,6 @@ def handle_client(connection,address):
                 resp = f"${len(entry_id)}\r\n{entry_id}\r\n".encode()
                 connection.sendall(resp)
 
-            elif cmd == "TYPE" and len(command_parts) == 2:
-                key = command_parts[1]
-                if key not in data_store:
-                    connection.sendall(b'+none\r\n')
-                else:
-                    value = data_store[key]
-                    if is_stream(value):
-                        connection.sendall(b'+stream\r\n')
-                    elif isinstance(value, list):
-                        connection.sendall(b'+list\r\n')
-                    else:
-                        connection.sendall(b'+string\r\n')
-
-
-
-
             elif cmd == 'BLPOP' and len(command_parts) == 3:
                 key = command_parts[1]
                 try:
@@ -296,15 +297,15 @@ def handle_client(connection,address):
                 except ValueError:
                     connection.sendall(b'-ERR value is not a float\r\n')
                     continue
-                            
+                        
                 if key in data_store and isinstance(data_store[key], list) and data_store[key]:
                     value = data_store[key].pop(0)
                     response = encode_resp_array([key, value])
                     connection.sendall(response)
                 else:
-                    event=threading.Event()
+                    event = threading.Event()
                     waiting_clients[key].append((connection, key, event))
-                    if timeout==0:
+                    if timeout == 0:
                         event.wait() 
                     else: 
                         if not event.wait(timeout):

@@ -133,6 +133,11 @@ def handle_client(connection,address):
                     data_store[key] = '1'
                     connection.sendall(b":1\r\n")
 
+
+            elif cmd == "MULTI" and len(command_parts) == 1:
+                connection.sendall(b'+OK\r\n')
+
+
             elif cmd == "XRANGE" and len(command_parts) >= 4:
                 key = command_parts[1]
                 start_id_str = command_parts[2]

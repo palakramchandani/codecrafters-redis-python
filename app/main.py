@@ -205,7 +205,16 @@ def handle_client(connection, address):
                 in_multi = False
                 queued_commands.clear()
                 continue
-            
+            elif cmd == "DISCARD" and len(command_parts) == 1:
+                if not in_multi:
+                    connection.sendall(b'-ERR DISCARD without MULTI\r\n')
+                    continue
+
+                    # Discard the transaction - clear queued commands and exit multi mode
+                in_multi = False
+                queued_commands.clear()
+                connection.sendall(b'+OK\r\n')
+                continue 
             # If we're in a transaction, queue most commands instead of executing them
             if in_multi:
                 # Commands that should be queued (not MULTI/EXEC which are handled above)
@@ -219,16 +228,7 @@ def handle_client(connection, address):
                     connection.sendall(b'+QUEUED\r\n')
                     continue
             # Handle DISCARD command
-            elif cmd == "DISCARD" and len(command_parts) == 1:
-                if not in_multi:
-                    connection.sendall(b'-ERR DISCARD without MULTI\r\n')
-                    continue
-
-                    # Discard the transaction - clear queued commands and exit multi mode
-                in_multi = False
-                queued_commands.clear()
-                connection.sendall(b'+OK\r\n')
-                continue 
+         
 
             # All other commands follow...
             if cmd == 'SET' and len(command_parts) >= 3:

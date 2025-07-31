@@ -115,7 +115,16 @@ def execute_command(command_parts):
         elif key in expiry_store:
             del expiry_store[key]
         return '+OK\r\n'
-    
+    elif cmd == 'INFO':
+    # Handle INFO command, specifically for replication section
+        if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
+            # Return replication info with role:master
+            info_response = "role:master"
+            return f"${len(info_response)}\r\n{info_response}\r\n"
+        else:
+            # For other sections, return empty for now
+            return f"$0\r\n\r\n"
+        
     elif cmd == "INCR" and len(command_parts) == 2:
         key = command_parts[1]
         current_time = int(time.time() * 1000)
@@ -224,7 +233,7 @@ def handle_client(connection, address):
             # If we're in a transaction, queue most commands instead of executing them
             if in_multi:
                 # Commands that should be queued (not MULTI/EXEC which are handled above)
-                if cmd in ['SET', 'GET', 'INCR', 'RPUSH', 'LPUSH', 'LPOP', 'LLEN', 'LRANGE', 'XADD', 'XRANGE', 'XREAD', 'TYPE', 'BLPOP']:
+                if cmd in ['SET', 'GET', 'INCR', 'RPUSH', 'LPUSH', 'LPOP', 'LLEN', 'LRANGE', 'XADD', 'XRANGE', 'XREAD', 'TYPE', 'BLPOP','INFO']:
                     queued_commands.append(command_parts)
                     connection.sendall(b'+QUEUED\r\n')
                     continue
@@ -275,6 +284,18 @@ def handle_client(connection, address):
                 else:   
                     data_store[key] = '1'
                     connection.sendall(b":1\r\n")
+
+            elif cmd == 'INFO':
+    # Handle INFO command, specifically for replication section
+                if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
+        # Return replication info with role:master
+                    info_response = "role:master"
+                    response = to_bulk_string(info_response)
+                    connection.sendall(response)
+                else:
+        # For other sections, return empty for now
+                    response = to_bulk_string("")
+                    connection.sendall(response)
 
             elif cmd == "XRANGE" and len(command_parts) >= 4:
                 key = command_parts[1]

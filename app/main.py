@@ -218,7 +218,18 @@ def handle_client(connection, address):
                     queued_commands.append(command_parts)
                     connection.sendall(b'+QUEUED\r\n')
                     continue
-            
+            # Handle DISCARD command
+            elif cmd == "DISCARD" and len(command_parts) == 1:
+                if not in_multi:
+                    connection.sendall(b'-ERR DISCARD without MULTI\r\n')
+                    continue
+
+                # Discard the transaction - clear queued commands and exit multi mode
+                in_multi = False
+                queued_commands.clear()
+                connection.sendall(b'+OK\r\n')
+                continue
+
             # All other commands follow...
             if cmd == 'SET' and len(command_parts) >= 3:
                 key, value = command_parts[1], command_parts[2]

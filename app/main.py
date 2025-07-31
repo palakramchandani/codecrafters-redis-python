@@ -128,6 +128,9 @@ def handle_client(connection,address):
                         connection.sendall(f":{new_value}\r\n".encode())
                     except (ValueError, TypeError):
                         continue
+                else:   
+                    data_store[key] = '1'
+                    connection.sendall(b":1\r\n")
 
             elif cmd == "XRANGE" and len(command_parts) >= 4:
                 key = command_parts[1]

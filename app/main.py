@@ -94,7 +94,71 @@ def is_stream(obj):
         return True
     first = obj[0]
     return (isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict))
+def execute_command(command_parts):
+    """Execute a single command and return its response as a string"""
+    cmd = command_parts[0].upper()
+    
+    if cmd == 'SET' and len(command_parts) >= 3:
+        key, value = command_parts[1], command_parts[2]
+        expiry = None
+        if len(command_parts) >= 5 and command_parts[3].upper() == 'PX':
+            try:
+                px = int(command_parts[4])
+                expiry = int(time.time() * 1000) + px
+            except (ValueError, IndexError):
+                return '-ERR invalid PX value\r\n'
 
+        data_store[key] = value
+        if expiry is not None:
+            expiry_store[key] = expiry
+        elif key in expiry_store:
+            del expiry_store[key]
+        return '+OK\r\n'
+    
+    elif cmd == "INCR" and len(command_parts) == 2:
+        key = command_parts[1]
+        if key in data_store:
+            value = data_store[key]
+            try:
+                new_value = int(value) + 1
+                data_store[key] = str(new_value)
+                return f":{new_value}\r\n"
+            except (ValueError, TypeError):
+                return '-ERR value is not an integer or out of range\r\n'
+        else:   
+            data_store[key] = '1'
+            return ":1\r\n"
+    
+    elif cmd == 'GET' and len(command_parts) == 2:
+        key = command_parts[1]
+        current_time = int(time.time() * 1000)
+        if key in expiry_store and current_time > expiry_store[key]:
+            del data_store[key]
+            del expiry_store[key]
+            return '$-1\r\n'
+        elif key in data_store:
+            value = data_store[key]
+            return f"${len(value)}\r\n{value}\r\n"
+        else:
+            return '$-1\r\n'
+    
+    # Add more commands as needed
+    elif cmd == 'RPUSH' and len(command_parts) >= 3:
+        key = command_parts[1]
+        values = command_parts[2:]
+        if key not in data_store:
+            data_store[key] = values[:]
+            length = len(data_store[key]) 
+        else:
+            if isinstance(data_store[key], list):
+                data_store[key].extend(values)
+                length = len(data_store[key])
+            else:
+                return '-ERR value is not a list\r\n'
+        return f':{length}\r\n'
+    
+    # Default case - return error for unimplemented commands
+    return '-ERR unknown command\r\n'
 def handle_client(connection, address):
     in_multi = False
     queued_commands = []
@@ -122,8 +186,22 @@ def handle_client(connection, address):
                     connection.sendall(b'-ERR EXEC without MULTI\r\n')
                     continue
                 
-                # Execute the transaction (currently empty, so just return empty array)
-                connection.sendall(b'*0\r\n')
+                # Execute all queued commands and collect their responses
+                responses = []
+                for queued_cmd_parts in queued_commands:
+                    response = execute_command(queued_cmd_parts)
+                    responses.append(response)
+                
+                # Send array of responses
+                if len(responses) == 0:
+                    connection.sendall(b'*0\r\n')
+                else:
+                    # Build RESP array response
+                    resp = f"*{len(responses)}\r\n"
+                    for response in responses:
+                        resp += response.decode() if isinstance(response, bytes) else response
+                    connection.sendall(resp.encode())
+                
                 in_multi = False
                 queued_commands.clear()
                 continue

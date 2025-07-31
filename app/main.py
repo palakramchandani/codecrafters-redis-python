@@ -2,6 +2,7 @@ from multiprocessing.dummy import connection
 import socket 
 import threading 
 import time
+import sys
 from collections import defaultdict
 
 
@@ -117,6 +118,11 @@ def execute_command(command_parts):
     
     elif cmd == "INCR" and len(command_parts) == 2:
         key = command_parts[1]
+        current_time = int(time.time() * 1000)
+        if key in expiry_store and current_time > expiry_store[key]:
+            del data_store[key]
+            del expiry_store[key]
+        
         if key in data_store:
             value = data_store[key]
             try:
@@ -252,6 +258,12 @@ def handle_client(connection, address):
             
             elif cmd == "INCR" and len(command_parts) == 2:
                 key = command_parts[1]
+                # Check if key exists and get current time for expiry check
+                current_time = int(time.time() * 1000)
+                if key in expiry_store and current_time > expiry_store[key]:
+                    del data_store[key]
+                    del expiry_store[key]
+                
                 if key in data_store:
                     value = data_store[key]
                     try:
@@ -725,9 +737,19 @@ def handle_client(connection, address):
         connection.close()
 
 def main():
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    port = 6379  # default port
+    
+    # Simple argument parsing for --port
+    if len(sys.argv) >= 3 and sys.argv[1] == '--port':
+        try:
+            port = int(sys.argv[2])
+        except ValueError:
+            print("Error: Invalid port number")
+            sys.exit(1)
+    
+    server_socket = socket.create_server(("localhost", port), reuse_port=True)
     server_socket.listen()
-    print("Server is listening on port 6379")
+    print(f"Server is listening on port {port}")
 
     while True:
         connection, address = server_socket.accept()

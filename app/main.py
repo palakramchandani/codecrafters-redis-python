@@ -127,7 +127,7 @@ def handle_client(connection,address):
                         data_store[key] = str(new_value)
                         connection.sendall(f":{new_value}\r\n".encode())
                     except (ValueError, TypeError):
-                        continue
+                        connection.sendall(b'-ERR value is not an integer\r\n')
                 else:   
                     data_store[key] = '1'
                     connection.sendall(b":1\r\n")

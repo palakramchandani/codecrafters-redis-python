@@ -224,11 +224,11 @@ def handle_client(connection, address):
                     connection.sendall(b'-ERR DISCARD without MULTI\r\n')
                     continue
 
-                # Discard the transaction - clear queued commands and exit multi mode
+                    # Discard the transaction - clear queued commands and exit multi mode
                 in_multi = False
                 queued_commands.clear()
                 connection.sendall(b'+OK\r\n')
-                continue
+                continue 
 
             # All other commands follow...
             if cmd == 'SET' and len(command_parts) >= 3:
@@ -247,8 +247,9 @@ def handle_client(connection, address):
                     expiry_store[key] = expiry
                 elif key in expiry_store:
                     del expiry_store[key]
-                connection.sendall(b'+OK\r\n')    
+                connection.sendall(b'+OK\r\n')   
 
+            
             elif cmd == "INCR" and len(command_parts) == 2:
                 key = command_parts[1]
                 if key in data_store:

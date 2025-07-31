@@ -90,6 +90,8 @@ def is_stream(obj):
                 first = obj[0]
                 return (isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict))
 def handle_client(connection,address):
+    in_multi = False
+    queued_commands = []
     try:
         while True:
             data = connection.recv(1024)
@@ -135,10 +137,21 @@ def handle_client(connection,address):
 
 
             elif cmd == "MULTI" and len(command_parts) == 1:
+                in_multi = True
+                queued_commands.clear()  # Clear any previous queued commands
                 connection.sendall(b'+OK\r\n')
 
             elif cmd == "EXEC" and len(command_parts) == 1:
-                connection.sendall(b'-ERR EXEC without MULTI\r\n')
+                if in_multi:
+
+                    if len(queued_commands) == 0:
+                        connection.sendall(b'*0\r\n')   
+                        in_multi = False
+                        queued_commands.clear()
+                    else:
+                        pass
+                else:
+                    connection.sendall(b'-ERR EXEC without MULTI\r\n')
 
             elif cmd == "XRANGE" and len(command_parts) >= 4:
                 key = command_parts[1]

@@ -110,6 +110,7 @@ def handle_client(connection,address):
                         connection.sendall(b'-ERR invalid PX value\r\n')
                         continue
 
+
                 data_store[key] = value
                 if expiry is not None:
                     expiry_store[key] = expiry
@@ -117,6 +118,16 @@ def handle_client(connection,address):
                     del expiry_store[key]
                 connection.sendall(b'+OK\r\n')    
 
+            elif cmd == "INCR" and len(command_parts) == 2:
+                key = command_parts[1]
+                if key in data_store:
+                    value = data_store[key]
+                    try:
+                        new_value = int(value) + 1
+                        data_store[key] = str(new_value)
+                        connection.sendall(f":{new_value}\r\n".encode())
+                    except (ValueError, TypeError):
+                        continue
 
             elif cmd == "XRANGE" and len(command_parts) >= 4:
                 key = command_parts[1]

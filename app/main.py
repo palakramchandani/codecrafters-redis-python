@@ -10,6 +10,10 @@ waiting_clients = defaultdict(list)
 data_store = {}
 expiry_store = {}
 NULL_BULK_STRING = b'$-1\r\n'
+# Global server configuration
+server_role = "master"  # default role
+master_host = None
+master_port = None
 
 stream_conditions = defaultdict(threading.Condition)
 
@@ -119,7 +123,7 @@ def execute_command(command_parts):
     # Handle INFO command, specifically for replication section
         if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
             # Return replication info with role:master
-            info_response = "role:master"
+            info_response = f"role:{server_role}"
             return f"${len(info_response)}\r\n{info_response}\r\n"
         else:
             # For other sections, return empty for now
@@ -289,7 +293,7 @@ def handle_client(connection, address):
     # Handle INFO command, specifically for replication section
                 if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
         # Return replication info with role:master
-                    info_response = "role:master"
+                    info_response = f"role:{server_role}"
                     response = to_bulk_string(info_response)
                     connection.sendall(response)
                 else:
@@ -758,26 +762,82 @@ def handle_client(connection, address):
         connection.close()
 
 def main():
-    port = 6379  # default port
-    
-    # Simple argument parsing for --port
-    if len(sys.argv) >= 3 and sys.argv[1] == '--port':
-        try:
-            port = int(sys.argv[2])
-        except ValueError:
-            print("Error: Invalid port number")
+    port = 6379  # Default port
+    server_role = "master"  # Default role
+    master_host = None
+    master_port = None
+
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+
+        if arg == '--port':
+            if i + 1 >= len(args):
+                print("Error: --port requires a port number argument")
+                sys.exit(1)
+            try:
+                port = int(args[i + 1])
+            except ValueError:
+                print("Error: invalid port number")
+                sys.exit(1)
+            i += 2
+
+        elif arg == '--replicaof':
+            if i + 1 >= len(args):
+                print("Error: --replicaof requires '<host> <port>' argument")
+                sys.exit(1)
+            replica_arg = args[i + 1]
+            # replica_arg expected in quotes, but since sys.argv splits, it may be separated. Join multiple if needed.
+            # Attempt to parse host and port from replica_arg string
+            # So split by space; if multiple parts, parse accordingly
+            parts = replica_arg.split()
+            if len(parts) == 2:
+                master_host = parts[0]
+                try:
+                    master_port = int(parts[1])
+                except ValueError:
+                    print("Error: invalid replica port number")
+                    sys.exit(1)
+            else:
+                # Maybe replica_arg is separate tokens, so consider next tokens
+                # Try join following tokens until port found
+                # Or fail with error
+                # For simplicity, assume user passes replicaof as one quoted string or two tokens
+                # We'll try to parse next tokens to get host and port
+                # Let's check if i + 2 is within bounds
+                if i + 2 < len(args):
+                    master_host = args[i + 1]
+                    try:
+                        master_port = int(args[i + 2])
+                        i += 1  # Advance extra token for port
+                    except ValueError:
+                        print("Error: invalid replica port number")
+                        sys.exit(1)
+                else:
+                    print("Error: --replicaof requires two arguments: <host> <port>")
+                    sys.exit(1)
+
+            server_role = "slave"
+            i += 2
+
+        else:
+            print(f"Error: unknown argument '{arg}'")
             sys.exit(1)
-    
+
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     server_socket.listen()
     print(f"Server is listening on port {port}")
+
+    # You may want to store server_role, master_host, master_port somewhere accessible for INFO command and replica logic
 
     while True:
         connection, address = server_socket.accept()
         print(f"Accepted connection from {address}")
         thread = threading.Thread(target=handle_client, args=(connection, address))
         thread.daemon = True
-        thread.start()  
+        thread.start()
+
 
 if __name__ == "__main__":
     main()

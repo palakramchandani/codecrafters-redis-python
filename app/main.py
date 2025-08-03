@@ -14,6 +14,8 @@ NULL_BULK_STRING = b'$-1\r\n'
 server_role = "master"  # default role
 master_host = None
 master_port = None
+master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # 40 character replication ID
+master_repl_offset = 0  
 
 stream_conditions = defaultdict(threading.Condition)
 
@@ -121,11 +123,12 @@ def execute_command(command_parts):
         elif key in expiry_store:
             del expiry_store[key]
         return '+OK\r\n'
+    
     elif cmd == 'INFO':
-    # Handle INFO command, specifically for replication section
+        # Handle INFO command, specifically for replication section
         if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
-            # Return replication info with role:master
-            info_response = f"role:{server_role}"
+            # Return replication info with role and replication details
+            info_response = f"role:{server_role}\r\nmaster_replid:{master_replid}\r\nmaster_repl_offset:{master_repl_offset}"
             return f"${len(info_response)}\r\n{info_response}\r\n"
         else:
             # For other sections, return empty for now
@@ -294,14 +297,14 @@ def handle_client(connection, address):
                     connection.sendall(b":1\r\n")
 
             elif cmd == 'INFO':
-    # Handle INFO command, specifically for replication section
+            # Handle INFO command, specifically for replication section
                 if len(command_parts) == 1 or (len(command_parts) == 2 and command_parts[1].lower() == 'replication'):
-        # Return replication info with role:master
-                    info_response = f"role:{server_role}"
+            # Return replication info with role and replication details
+                    info_response = f"role:{server_role}\r\nmaster_replid:{master_replid}\r\nmaster_repl_offset:{master_repl_offset}"
                     response = to_bulk_string(info_response)
                     connection.sendall(response)
                 else:
-        # For other sections, return empty for now
+            # For other sections, return empty for now
                     response = to_bulk_string("")
                     connection.sendall(response)
 

@@ -153,7 +153,7 @@ def connect_to_master():
 
 def execute_command(command_parts):
     """Execute a single command and return its response as a string"""
-    global server_role
+    global server_role, master_replid, master_repl_offset
     cmd = command_parts[0].upper()
     
     if cmd == 'SET' and len(command_parts) >= 3:
@@ -234,12 +234,17 @@ def execute_command(command_parts):
         # Handle REPLCONF command from replica during handshake
         # For this stage, we can ignore the arguments and just respond with OK
         return '+OK\r\n'
+
+    elif cmd == 'PSYNC':
+        # Handle PSYNC command from replica during handshake
+        # Respond with FULLRESYNC and our replication ID and offset
+        return f'+FULLRESYNC {master_replid} {master_repl_offset}\r\n'
     
     # Default case - return error for unimplemented commands
     return '-ERR unknown command\r\n'
 
 def handle_client(connection, address):
-    global server_role
+    global server_role, master_replid, master_repl_offset
     in_multi = False
     queued_commands = []
     try:
@@ -451,6 +456,11 @@ def handle_client(connection, address):
 
             elif cmd=='REPLCONF':
                 connection.sendall(b'+OK\r\n')
+
+            elif cmd == 'PSYNC':
+                # Handle PSYNC command from replica during handshake
+                # Respond with FULLRESYNC and our replication ID and offset
+                return f'+FULLRESYNC {master_replid} {master_repl_offset}\r\n'
 
             elif cmd == 'LRANGE' and len(command_parts) == 4:
                 key = command_parts[1]

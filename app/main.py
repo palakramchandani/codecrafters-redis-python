@@ -230,6 +230,11 @@ def execute_command(command_parts):
                 return '-ERR value is not a list\r\n'
         return f':{length}\r\n'
     
+    elif cmd == 'REPLCONF':
+        # Handle REPLCONF command from replica during handshake
+        # For this stage, we can ignore the arguments and just respond with OK
+        return '+OK\r\n'
+    
     # Default case - return error for unimplemented commands
     return '-ERR unknown command\r\n'
 
@@ -443,6 +448,9 @@ def handle_client(connection, address):
                 
             elif cmd == 'PING':
                 connection.sendall(b'+PONG\r\n')
+
+            elif cmd=='REPLCONF':
+                connection.sendall(b'+OK\r\n')
 
             elif cmd == 'LRANGE' and len(command_parts) == 4:
                 key = command_parts[1]

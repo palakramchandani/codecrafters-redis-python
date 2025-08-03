@@ -102,6 +102,34 @@ def is_stream(obj):
     first = obj[0]
     return (isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict))
 
+def connect_to_master():
+    """Connect to master server and perform initial handshake"""
+    global master_host, master_port
+    
+    if master_host is None or master_port is None:
+        return
+    
+    try:
+        # Connect to master
+        master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        master_socket.connect((master_host, master_port))
+        
+        # Send PING command as RESP array
+        ping_command = b'*1\r\n$4\r\nPING\r\n'
+        master_socket.send(ping_command)
+        
+        # Read response (should be +PONG\r\n)
+        response = master_socket.recv(1024)
+        print(f"Master responded to PING: {response}")
+        
+        # Keep connection open for future stages
+        # For now, we'll close it, but in later stages we'll keep it
+        master_socket.close()
+        
+    except Exception as e:
+        print(f"Error connecting to master: {e}")
+
+
 def execute_command(command_parts):
     """Execute a single command and return its response as a string"""
     global server_role
@@ -835,8 +863,8 @@ def main():
     server_socket.listen()
     print(f"Server is listening on port {port}")
 
-    # You may want to store server_role, master_host, master_port somewhere accessible for INFO command and replica logic
-
+    if server_role=="slave":
+        connect_to_master()
     while True:
         connection, address = server_socket.accept()
         print(f"Accepted connection from {address}")

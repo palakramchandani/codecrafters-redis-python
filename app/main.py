@@ -16,6 +16,7 @@ master_host = None
 master_port = None
 master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # 40 character replication ID
 master_repl_offset = 0  
+replica_listening_port=None
 
 stream_conditions = defaultdict(threading.Condition)
 
@@ -121,6 +122,23 @@ def connect_to_master():
         # Read response (should be +PONG\r\n)
         response = master_socket.recv(1024)
         print(f"Master responded to PING: {response}")
+        
+        # Send REPLCONF listening-port <PORT>
+        port_str = str(replica_listening_port if replica_listening_port else 6379)  # Use the port we're listening on
+        replconf_port_command = f'*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(port_str)}\r\n{port_str}\r\n'.encode()
+        master_socket.send(replconf_port_command)
+        
+        # Read response (should be +OK\r\n)
+        response = master_socket.recv(1024)
+        print(f"Master responded to REPLCONF listening-port: {response}")
+        
+        # Send REPLCONF capa psync2
+        replconf_capa_command = b'*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n'
+        master_socket.send(replconf_capa_command)
+        
+        # Read response (should be +OK\r\n)
+        response = master_socket.recv(1024)
+        print(f"Master responded to REPLCONF capa: {response}")
         
         # Keep connection open for future stages
         # For now, we'll close it, but in later stages we'll keep it
@@ -864,7 +882,10 @@ def main():
     print(f"Server is listening on port {port}")
 
     if server_role=="slave":
+        global replica_listening_port
+        replica_listening_port=port
         connect_to_master()
+
     while True:
         connection, address = server_socket.accept()
         print(f"Accepted connection from {address}")

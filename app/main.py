@@ -99,8 +99,10 @@ def is_stream(obj):
         return True
     first = obj[0]
     return (isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict))
+
 def execute_command(command_parts):
     """Execute a single command and return its response as a string"""
+    global server_role
     cmd = command_parts[0].upper()
     
     if cmd == 'SET' and len(command_parts) >= 3:
@@ -178,7 +180,9 @@ def execute_command(command_parts):
     
     # Default case - return error for unimplemented commands
     return '-ERR unknown command\r\n'
+
 def handle_client(connection, address):
+    global server_role
     in_multi = False
     queued_commands = []
     try:
@@ -762,10 +766,9 @@ def handle_client(connection, address):
         connection.close()
 
 def main():
+    global server_role, master_host, master_port
+    
     port = 6379  # Default port
-    server_role = "master"  # Default role
-    master_host = None
-    master_port = None
 
     args = sys.argv[1:]
     i = 0

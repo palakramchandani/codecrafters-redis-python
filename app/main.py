@@ -460,7 +460,8 @@ def handle_client(connection, address):
             elif cmd == 'PSYNC':
                 # Handle PSYNC command from replica during handshake
                 # Respond with FULLRESYNC and our replication ID and offset
-                return f'+FULLRESYNC {master_replid} {master_repl_offset}\r\n'
+                response= f'+FULLRESYNC {master_replid} {master_repl_offset}\r\n'
+                connection.sendall(response.encode())
 
             elif cmd == 'LRANGE' and len(command_parts) == 4:
                 key = command_parts[1]

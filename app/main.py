@@ -135,6 +135,9 @@ def connect_to_master():
         # Send REPLCONF capa psync2
         replconf_capa_command = b'*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n'
         master_socket.send(replconf_capa_command)
+
+        psync_command = b'*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n'
+        master_socket.send(psync_command)
         
         # Read response (should be +OK\r\n)
         response = master_socket.recv(1024)
